@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -27,11 +31,51 @@ const initialLessons: Lesson[] = [
   { id: 'navigation', title: '下一步：Expo Router', detail: '用文件系统路由创建多页面应用。', completed: false },
 ];
 
+const LESSONS_STORAGE_KEY = '@myapp/lessons';
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [lessons, setLessons] = useState(initialLessons);
   const [newLessonTitle, setNewLessonTitle] = useState('');
+  const [hasRestoredLessons, setHasRestoredLessons] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
   const completedCount = useMemo(() => lessons.filter((lesson) => lesson.completed).length, [lessons]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function restoreLessons() {
+      try {
+        const storedLessons = await AsyncStorage.getItem(LESSONS_STORAGE_KEY);
+        if (storedLessons && isActive) {
+          const parsedLessons: unknown = JSON.parse(storedLessons);
+          if (Array.isArray(parsedLessons)) {
+            setLessons(parsedLessons as Lesson[]);
+          }
+        }
+      } catch (error) {
+        console.warn('无法恢复本地任务数据', error);
+      } finally {
+        if (isActive) {
+          setHasRestoredLessons(true);
+        }
+      }
+    }
+
+    void restoreLessons();
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasRestoredLessons) return;
+
+    void AsyncStorage.setItem(LESSONS_STORAGE_KEY, JSON.stringify(lessons)).catch((error) => {
+      console.warn('无法保存本地任务数据', error);
+    });
+  }, [hasRestoredLessons, lessons]);
 
   function toggleLesson(id: string) {
     setLessons((currentLessons) =>
@@ -58,7 +102,51 @@ export default function HomeScreen() {
     Keyboard.dismiss();
   }
 
+  function openEditor(lesson: Lesson) {
+    setEditingLesson(lesson);
+    setEditingTitle(lesson.title);
+  }
+
+  function closeEditor() {
+    setEditingLesson(null);
+    setEditingTitle('');
+  }
+
+  function saveEditing() {
+    if (!editingLesson) return;
+    const title = editingTitle.trim();
+    if (!title) return;
+
+    setLessons((currentLessons) =>
+      currentLessons.map((lesson) =>
+        lesson.id === editingLesson.id ? { ...lesson, title } : lesson,
+      ),
+    );
+    closeEditor();
+  }
+
+  function confirmDelete(lesson: Lesson) {
+    Alert.alert('删除任务？', `“${lesson.title}”将从本地任务清单中移除。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => setLessons((currentLessons) => currentLessons.filter((item) => item.id !== lesson.id)),
+      },
+    ]);
+  }
+
+  if (!hasRestoredLessons) {
+    return (
+      <View style={[styles.loadingScreen, { paddingTop: insets.top }]}>
+        <ActivityIndicator color="#2563EB" size="large" />
+        <Text style={styles.loadingText}>正在恢复本地任务…</Text>
+      </View>
+    );
+  }
+
   return (
+    <>
     <KeyboardAvoidingView
       behavior={Platform.select({ ios: 'padding', android: 'height' })}
       style={styles.screen}>
@@ -107,31 +195,77 @@ export default function HomeScreen() {
           </View>
         }
         renderItem={({ item }) => (
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: item.completed }}
-          accessibilityHint={item.id === 'navigation' ? '打开 Expo Router 课程页' : '切换任务完成状态'}
-          onPress={() => (item.id === 'navigation' ? router.push('/lesson') : toggleLesson(item.id))}
-          style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}>
-          <View style={[styles.check, item.completed && styles.checkCompleted]}>
-            <Text style={styles.checkText}>{item.completed ? '✓' : ''}</Text>
+          <View style={styles.item}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: item.completed }}
+              accessibilityHint={item.id === 'navigation' ? '打开 Expo Router 课程页' : '切换任务完成状态'}
+              onPress={() => (item.id === 'navigation' ? router.push('/lesson') : toggleLesson(item.id))}
+              style={({ pressed }) => [styles.itemMain, pressed && styles.itemPressed]}>
+              <View style={[styles.check, item.completed && styles.checkCompleted]}>
+                <Text style={styles.checkText}>{item.completed ? '✓' : ''}</Text>
+              </View>
+              <View style={styles.itemText}>
+                <Text style={[styles.itemTitle, item.completed && styles.itemTitleCompleted]}>{item.title}</Text>
+                <Text style={styles.itemDetail}>{item.detail}</Text>
+              </View>
+            </Pressable>
+            <View style={styles.itemActions}>
+              <Pressable accessibilityLabel={`编辑${item.title}`} onPress={() => openEditor(item)} style={styles.actionButton}>
+                <Text style={styles.editText}>编辑</Text>
+              </Pressable>
+              <Pressable accessibilityLabel={`删除${item.title}`} onPress={() => confirmDelete(item)} style={styles.actionButton}>
+                <Text style={styles.deleteText}>删除</Text>
+              </Pressable>
+            </View>
           </View>
-          <View style={styles.itemText}>
-            <Text style={[styles.itemTitle, item.completed && styles.itemTitleCompleted]}>{item.title}</Text>
-            <Text style={styles.itemDetail}>{item.detail}</Text>
-          </View>
-        </Pressable>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListFooterComponent={<Text style={styles.tip}>你创建的任务只保存在当前内存中；下一步会把它持久化。</Text>}
         ListFooterComponentStyle={styles.footer}
       />
     </KeyboardAvoidingView>
+    <Modal
+      animationType="fade"
+      onRequestClose={closeEditor}
+      transparent
+      visible={editingLesson !== null}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>编辑任务</Text>
+          <Text style={styles.modalDescription}>修改后会自动保存到本机。</Text>
+          <TextInput
+            accessibilityLabel="任务名称"
+            autoFocus
+            onChangeText={setEditingTitle}
+            onSubmitEditing={saveEditing}
+            returnKeyType="done"
+            submitBehavior="submit"
+            value={editingTitle}
+            style={styles.modalInput}
+          />
+          <View style={styles.modalActions}>
+            <Pressable onPress={closeEditor} style={styles.cancelButton}>
+              <Text style={styles.cancelButtonText}>取消</Text>
+            </Pressable>
+            <Pressable
+              disabled={!editingTitle.trim()}
+              onPress={saveEditing}
+              style={[styles.saveButton, !editingTitle.trim() && styles.addButtonDisabled]}>
+              <Text style={styles.addButtonText}>保存</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#F4F7FB' },
+  loadingText: { color: '#4B5563', fontSize: 16 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 36, backgroundColor: '#F4F7FB' },
   header: { gap: 12, marginBottom: 24 },
   eyebrow: { color: '#2563EB', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
@@ -156,7 +290,8 @@ const styles = StyleSheet.create({
   progressLabel: { color: '#DBEAFE', fontSize: 14, fontWeight: '600' },
   progressValue: { color: '#FFFFFF', fontSize: 32, fontWeight: '700' },
   sectionTitle: { marginTop: 8, color: '#111827', fontSize: 18, fontWeight: '700' },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, backgroundColor: '#FFFFFF' },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 16, backgroundColor: '#FFFFFF' },
+  itemMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 4 },
   itemPressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
   check: { alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderWidth: 2, borderRadius: 14, borderColor: '#93C5FD' },
   checkCompleted: { borderColor: '#2563EB', backgroundColor: '#2563EB' },
@@ -165,7 +300,20 @@ const styles = StyleSheet.create({
   itemTitle: { color: '#111827', fontSize: 16, fontWeight: '700' },
   itemTitleCompleted: { color: '#6B7280', textDecorationLine: 'line-through' },
   itemDetail: { color: '#6B7280', fontSize: 14, lineHeight: 20 },
+  itemActions: { gap: 2 },
+  actionButton: { minWidth: 44, paddingVertical: 6, alignItems: 'center' },
+  editText: { color: '#2563EB', fontSize: 13, fontWeight: '700' },
+  deleteText: { color: '#DC2626', fontSize: 13, fontWeight: '700' },
   separator: { height: 12 },
   footer: { paddingTop: 20 },
   tip: { color: '#6B7280', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(17, 24, 39, 0.5)' },
+  modalCard: { gap: 12, padding: 20, borderRadius: 20, backgroundColor: '#FFFFFF' },
+  modalTitle: { color: '#111827', fontSize: 22, fontWeight: '700' },
+  modalDescription: { color: '#6B7280', fontSize: 14 },
+  modalInput: { minHeight: 52, paddingHorizontal: 14, borderWidth: 1, borderRadius: 12, borderColor: '#BFDBFE', color: '#111827', fontSize: 16 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
+  cancelButton: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: '#E5E7EB' },
+  cancelButtonText: { color: '#374151', fontSize: 16, fontWeight: '700' },
+  saveButton: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: '#2563EB' },
 });
