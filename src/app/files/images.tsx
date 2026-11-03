@@ -165,6 +165,10 @@ export default function ImagesScreen() {
         ))}
       </View>
 
+      <Pressable accessibilityRole="button" onPress={() => router.push('/files/network')} style={styles.nextButton}>
+        <Text style={styles.nextButtonText}>进入 Day 9：远端任务列表</Text>
+      </Pressable>
+
       <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
         <Text style={styles.backText}>返回 Day 6</Text>
       </Pressable>
@@ -205,6 +209,8 @@ const styles = StyleSheet.create({
   emptyPreview: { padding: 20, borderRadius: 16, backgroundColor: '#E5E7EB' },
   logCard: { gap: 10, padding: 16, borderRadius: 16, backgroundColor: '#111827' },
   logLine: { color: '#93C5FD', fontSize: 14, lineHeight: 20 },
+  nextButton: { alignItems: 'center', padding: 14, borderRadius: 14, backgroundColor: '#DBEAFE' },
+  nextButtonText: { color: '#1D4ED8', fontSize: 15, fontWeight: '700' },
   backButton: { alignItems: 'center', padding: 14 },
   backText: { color: '#2563EB', fontSize: 15, fontWeight: '700' },
 });
