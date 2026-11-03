@@ -24,6 +24,8 @@ type Lesson = {
   completed: boolean;
 };
 
+type LessonFilter = 'all' | 'active' | 'completed';
+
 const initialLessons: Lesson[] = [
   { id: 'layout', title: '布局：View 与 StyleSheet', detail: '用 Flexbox 组织移动端界面。', completed: true },
   { id: 'pressable', title: '交互：Pressable', detail: '处理点击、按下与长按等触摸手势。', completed: false },
@@ -33,6 +35,12 @@ const initialLessons: Lesson[] = [
 
 const LESSONS_STORAGE_KEY = '@myapp/lessons';
 
+const filterOptions: { key: LessonFilter; label: string }[] = [
+  { key: 'all', label: '全部' },
+  { key: 'active', label: '待完成' },
+  { key: 'completed', label: '已完成' },
+];
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [lessons, setLessons] = useState(initialLessons);
@@ -40,7 +48,22 @@ export default function HomeScreen() {
   const [hasRestoredLessons, setHasRestoredLessons] = useState(false);
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [filter, setFilter] = useState<LessonFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const completedCount = useMemo(() => lessons.filter((lesson) => lesson.completed).length, [lessons]);
+  const visibleLessons = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+
+    return lessons.filter((lesson) => {
+      const matchesFilter =
+        filter === 'all' ||
+        (filter === 'active' && !lesson.completed) ||
+        (filter === 'completed' && lesson.completed);
+      const matchesSearch = !normalizedQuery || lesson.title.toLocaleLowerCase().includes(normalizedQuery);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [filter, lessons, searchQuery]);
 
   useEffect(() => {
     let isActive = true;
@@ -151,7 +174,7 @@ export default function HomeScreen() {
       behavior={Platform.select({ ios: 'padding', android: 'height' })}
       style={styles.screen}>
       <FlatList
-        data={lessons}
+        data={visibleLessons}
         keyExtractor={(lesson) => lesson.id}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
         keyboardShouldPersistTaps="handled"
@@ -192,6 +215,29 @@ export default function HomeScreen() {
             <Text style={styles.progressValue}>{completedCount} / {lessons.length}</Text>
           </View>
           <Text style={styles.sectionTitle}>课程任务</Text>
+          <TextInput
+            accessibilityLabel="搜索任务"
+            clearButtonMode="while-editing"
+            onChangeText={setSearchQuery}
+            placeholder="搜索任务名称"
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            style={styles.searchInput}
+          />
+          <View accessibilityRole="tablist" style={styles.filterRow}>
+            {filterOptions.map((option) => (
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: filter === option.key }}
+                key={option.key}
+                onPress={() => setFilter(option.key)}
+                style={[styles.filterButton, filter === option.key && styles.filterButtonSelected]}>
+                <Text style={[styles.filterButtonText, filter === option.key && styles.filterButtonTextSelected]}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           </View>
         }
         renderItem={({ item }) => (
@@ -221,7 +267,13 @@ export default function HomeScreen() {
           </View>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListFooterComponent={<Text style={styles.tip}>你创建的任务只保存在当前内存中；下一步会把它持久化。</Text>}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>没有匹配的任务</Text>
+            <Text style={styles.emptyDescription}>试试切换筛选条件，或换一个搜索词。</Text>
+          </View>
+        }
+        ListFooterComponent={<Text style={styles.tip}>任务会自动保存到本机；筛选和搜索只影响当前展示。</Text>}
         ListFooterComponentStyle={styles.footer}
       />
     </KeyboardAvoidingView>
@@ -290,6 +342,21 @@ const styles = StyleSheet.create({
   progressLabel: { color: '#DBEAFE', fontSize: 14, fontWeight: '600' },
   progressValue: { color: '#FFFFFF', fontSize: 32, fontWeight: '700' },
   sectionTitle: { marginTop: 8, color: '#111827', fontSize: 18, fontWeight: '700' },
+  searchInput: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+    borderColor: '#BFDBFE',
+    color: '#111827',
+    fontSize: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  filterRow: { flexDirection: 'row', gap: 8 },
+  filterButton: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  filterButtonSelected: { backgroundColor: '#2563EB' },
+  filterButtonText: { color: '#4B5563', fontSize: 14, fontWeight: '700' },
+  filterButtonTextSelected: { color: '#FFFFFF' },
   item: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 16, backgroundColor: '#FFFFFF' },
   itemMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 4 },
   itemPressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
@@ -305,6 +372,9 @@ const styles = StyleSheet.create({
   editText: { color: '#2563EB', fontSize: 13, fontWeight: '700' },
   deleteText: { color: '#DC2626', fontSize: 13, fontWeight: '700' },
   separator: { height: 12 },
+  emptyState: { alignItems: 'center', gap: 6, paddingVertical: 32 },
+  emptyTitle: { color: '#374151', fontSize: 18, fontWeight: '700' },
+  emptyDescription: { color: '#6B7280', fontSize: 14 },
   footer: { paddingTop: 20 },
   tip: { color: '#6B7280', fontSize: 14, lineHeight: 20, textAlign: 'center' },
   modalOverlay: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(17, 24, 39, 0.5)' },

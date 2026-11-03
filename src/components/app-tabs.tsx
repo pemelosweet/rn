@@ -21,14 +21,6 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="lesson">
         <NativeTabs.Trigger.Label>Course2</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="book" md="menu_book" />
@@ -37,6 +29,11 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="device">
         <NativeTabs.Trigger.Label>Day5</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="waveform" md="vibration" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="files">
+        <NativeTabs.Trigger.Label>Day6</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="doc.text" md="description" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
